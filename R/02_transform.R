@@ -26,7 +26,9 @@ abs_prices_clean <- readRDS("data/raw/abs_trade_prices.rds") |>
   select(date, label, value) |>
   pivot_wider(names_from = label, values_from = value) |>
   arrange(date) |>
-  mutate(across(-date, \(x) log(x / lag(x, 4)), .names = "dlog_{.col}"))
+  mutate(across(-date, \(x) log(x / lag(x, 4)), .names = "dlog_{.col}")) |>
+  mutate(across(c(-date, -starts_with("dlog_")),
+                \(x) log(x / lag(x, 1)), .names = "qlog_{.col}"))
 
 saveRDS(abs_prices_clean, "data/processed/abs_prices_clean.rds")
 
@@ -46,7 +48,9 @@ fred_prices_clean <- readRDS("data/raw/fred_commodity_prices.rds") |>
     ttf_gas_aud_mmbtu   = ttf_gas_usd_mmbtu   / aud_usd
   ) |>
   arrange(quarter) |>
-  mutate(across(-quarter, \(x) log(x / lag(x, 4)), .names = "dlog_{.col}"))
+  mutate(across(-quarter, \(x) log(x / lag(x, 4)), .names = "dlog_{.col}")) |>
+  mutate(across(c(-quarter, -starts_with("dlog_")),
+                \(x) log(x / lag(x, 1)), .names = "qlog_{.col}"))
 
 saveRDS(fred_prices_clean, "data/processed/fred_prices_clean.rds")
 
@@ -113,6 +117,24 @@ tot_decomp_agg <- abs_prices_clean |>
 
 saveRDS(tot_decomp_agg, "data/processed/tot_decomp_agg.rds")
 
+tot_decomp_agg_qoq <- abs_prices_clean |>
+  select(date, qlog_epi_all, qlog_mpi_all,
+         qlog_epi_mineral_fuels, qlog_mpi_mineral_fuels) |>
+  mutate(fy = quarter_fy(date)) |>
+  left_join(select(trade_weights, fy, w_epi_mineral_fuels, w_mpi_mineral_fuels),
+            by = "fy") |>
+  mutate(
+    dlog_tot                  = qlog_epi_all - qlog_mpi_all,
+    energy_export_contrib     =  w_epi_mineral_fuels * qlog_epi_mineral_fuels,
+    non_energy_export_contrib =  qlog_epi_all - energy_export_contrib,
+    energy_import_contrib     = -w_mpi_mineral_fuels * qlog_mpi_mineral_fuels,
+    non_energy_import_contrib = -qlog_mpi_all - energy_import_contrib
+  ) |>
+  select(date, dlog_tot, energy_export_contrib, non_energy_export_contrib,
+         energy_import_contrib, non_energy_import_contrib)
+
+saveRDS(tot_decomp_agg_qoq, "data/processed/tot_decomp_agg_qoq.rds")
+
 # ------------------------------------------------------------------------------
 # Step 3b: ToT decomposition — disaggregated (SITC 32/33/34/56)
 # ------------------------------------------------------------------------------
@@ -144,3 +166,31 @@ tot_decomp_disagg <- abs_prices_clean |>
          non_energy_import_contrib)
 
 saveRDS(tot_decomp_disagg, "data/processed/tot_decomp_disagg.rds")
+
+tot_decomp_disagg_qoq <- abs_prices_clean |>
+  select(date, qlog_epi_all, qlog_mpi_all,
+         qlog_epi_coal, qlog_epi_petroleum, qlog_epi_gas,
+         qlog_mpi_petroleum, qlog_mpi_fertilisers) |>
+  mutate(fy = quarter_fy(date)) |>
+  left_join(select(trade_weights, fy, w_epi_coal, w_epi_petroleum, w_epi_gas,
+                   w_mpi_petroleum, w_mpi_fertilisers),
+            by = "fy") |>
+  mutate(
+    dlog_tot                  = qlog_epi_all - qlog_mpi_all,
+    coal_export_contrib       =  w_epi_coal        * qlog_epi_coal,
+    petroleum_export_contrib  =  w_epi_petroleum   * qlog_epi_petroleum,
+    gas_export_contrib        =  w_epi_gas         * qlog_epi_gas,
+    non_energy_export_contrib =  qlog_epi_all - coal_export_contrib
+                                              - petroleum_export_contrib
+                                              - gas_export_contrib,
+    petroleum_import_contrib  = -w_mpi_petroleum   * qlog_mpi_petroleum,
+    fertiliser_import_contrib = -w_mpi_fertilisers * qlog_mpi_fertilisers,
+    non_energy_import_contrib = -qlog_mpi_all - petroleum_import_contrib
+                                              - fertiliser_import_contrib
+  ) |>
+  select(date, dlog_tot, coal_export_contrib, petroleum_export_contrib,
+         gas_export_contrib, non_energy_export_contrib,
+         petroleum_import_contrib, fertiliser_import_contrib,
+         non_energy_import_contrib)
+
+saveRDS(tot_decomp_disagg_qoq, "data/processed/tot_decomp_disagg_qoq.rds")

@@ -3,8 +3,10 @@
 
 library(tidyverse)
 
-tot_decomp_agg    <- readRDS("data/processed/tot_decomp_agg.rds")
-tot_decomp_disagg <- readRDS("data/processed/tot_decomp_disagg.rds")
+tot_decomp_agg        <- readRDS("data/processed/tot_decomp_agg.rds")
+tot_decomp_disagg     <- readRDS("data/processed/tot_decomp_disagg.rds")
+tot_decomp_agg_qoq    <- readRDS("data/processed/tot_decomp_agg_qoq.rds")
+tot_decomp_disagg_qoq <- readRDS("data/processed/tot_decomp_disagg_qoq.rds")
 
 # ------------------------------------------------------------------------------
 # Chart 1: Total export vs import price contributions
@@ -134,4 +136,113 @@ p3 <- ggplot(chart3_data, aes(x = date)) +
   theme(legend.position = "bottom")
 
 ggsave("output/figures/tot_decomp_3_sitc_disagg.png", p3,
+       width = 18, height = 10, units = "cm", dpi = 150)
+
+# ------------------------------------------------------------------------------
+# Chart 4: QoQ — Total export vs import price contributions
+# ------------------------------------------------------------------------------
+
+chart4_data <- tot_decomp_agg_qoq |>
+  filter(date >= "2000-01-01") |>
+  mutate(
+    "Export prices" = (energy_export_contrib + non_energy_export_contrib) * 100,
+    "Import prices" = (energy_import_contrib + non_energy_import_contrib) * 100,
+    dlog_tot_pct    = dlog_tot * 100
+  ) |>
+  pivot_longer(cols = c("Export prices", "Import prices"),
+               names_to = "component", values_to = "value_pct") |>
+  mutate(component = factor(component, levels = names(colors_1)))
+
+p4 <- ggplot(chart4_data, aes(x = date)) +
+  geom_col(aes(y = value_pct, fill = component), position = "stack", width = 70) +
+  geom_line(aes(y = dlog_tot_pct), color = "black", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = colors_1) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+               limits = as.Date(c("2000-01-01", "2025-12-31"))) +
+  labs(
+    title    = "Australia's terms of trade: export and import price contributions",
+    subtitle = "Quarter-on-quarter log change, percentage points",
+    x = NULL, y = "Percentage points", fill = NULL,
+    caption  = "Sources: ABS Cat. 6457.0, 5368.0"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggsave("output/figures/tot_decomp_4_qoq_export_import.png", p4,
+       width = 18, height = 10, units = "cm", dpi = 150)
+
+# ------------------------------------------------------------------------------
+# Chart 5: QoQ — SITC 3 mineral fuels + other
+# ------------------------------------------------------------------------------
+
+chart5_data <- tot_decomp_agg_qoq |>
+  filter(date >= "2000-01-01") |>
+  mutate(
+    "Energy exports (SITC 3)" = energy_export_contrib     * 100,
+    "Other exports"           = non_energy_export_contrib * 100,
+    "Energy imports (SITC 3)" = energy_import_contrib     * 100,
+    "Other imports"           = non_energy_import_contrib * 100,
+    dlog_tot_pct              = dlog_tot * 100
+  ) |>
+  pivot_longer(cols = all_of(names(colors_2)),
+               names_to = "component", values_to = "value_pct") |>
+  mutate(component = factor(component, levels = names(colors_2)))
+
+p5 <- ggplot(chart5_data, aes(x = date)) +
+  geom_col(aes(y = value_pct, fill = component), position = "stack", width = 70) +
+  geom_line(aes(y = dlog_tot_pct), color = "black", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = colors_2) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+               limits = as.Date(c("2000-01-01", "2025-12-31"))) +
+  labs(
+    title    = "Australia's terms of trade: mineral fuels contributions (SITC 3)",
+    subtitle = "Quarter-on-quarter log change, percentage points",
+    x = NULL, y = "Percentage points", fill = NULL,
+    caption  = "Sources: ABS Cat. 6457.0, 5368.0"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggsave("output/figures/tot_decomp_5_qoq_sitc3.png", p5,
+       width = 18, height = 10, units = "cm", dpi = 150)
+
+# ------------------------------------------------------------------------------
+# Chart 6: QoQ — SITC 32/33/34 exports, SITC 33/56 imports + other (net)
+# ------------------------------------------------------------------------------
+
+chart6_data <- tot_decomp_disagg_qoq |>
+  filter(date >= "2000-01-01") |>
+  mutate(
+    "Coal exports (SITC 32)"       = coal_export_contrib       * 100,
+    "Petroleum exports (SITC 33)"  = petroleum_export_contrib  * 100,
+    "Gas/LNG exports (SITC 34)"    = gas_export_contrib        * 100,
+    "Petroleum imports (SITC 33)"  = petroleum_import_contrib  * 100,
+    "Fertiliser imports (SITC 56)" = fertiliser_import_contrib * 100,
+    "Other (net)"                  = (non_energy_export_contrib +
+                                      non_energy_import_contrib) * 100,
+    dlog_tot_pct                   = dlog_tot * 100
+  ) |>
+  pivot_longer(cols = all_of(names(colors_3)),
+               names_to = "component", values_to = "value_pct") |>
+  mutate(component = factor(component, levels = names(colors_3)))
+
+p6 <- ggplot(chart6_data, aes(x = date)) +
+  geom_col(aes(y = value_pct, fill = component), position = "stack", width = 70) +
+  geom_line(aes(y = dlog_tot_pct), color = "black", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = colors_3) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+               limits = as.Date(c("2000-01-01", "2025-12-31"))) +
+  labs(
+    title    = "Australia's terms of trade: commodity-level contributions",
+    subtitle = "Quarter-on-quarter log change, percentage points",
+    x = NULL, y = "Percentage points", fill = NULL,
+    caption  = "Sources: ABS Cat. 6457.0, 5368.0"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggsave("output/figures/tot_decomp_6_qoq_sitc_disagg.png", p6,
        width = 18, height = 10, units = "cm", dpi = 150)
