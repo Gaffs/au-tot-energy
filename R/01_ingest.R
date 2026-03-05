@@ -12,13 +12,12 @@ fredr_set_key(Sys.getenv("FRED_API_KEY"))
 # ABS: International Trade Price Indexes (Cat. 6457.0), quarterly
 # ------------------------------------------------------------------------------
 
-# Download the full catalogue first. Run the next two lines interactively to
-# verify series IDs before filtering:
-  abs_6457 <- read_abs(cat_no = "6457.0")
-  abs_6457_ids <- abs_6457 |> distinct(table_title, series, series_id)
-  print(abs_6457_ids, n = Inf)
+# To rediscover series IDs, run interactively:
+#   abs_6457 <- read_abs(cat_no = "6457.0")
+#   abs_6457_ids <- abs_6457 |> distinct(table_title, series, series_id)
+#   print(abs_6457_ids, n = Inf)
 #
-# Confirmed series IDs (verify against catalogue output above):
+# Confirmed series IDs:
 abs_price_series_ids <- c(
   # Import price indexes
   "A2295765J",  # Import Price Index: All groups
@@ -43,30 +42,28 @@ saveRDS(abs_trade_prices, "data/raw/abs_trade_prices.rds")
 # Used to construct time-varying value-share weights for the ToT decomposition
 # ------------------------------------------------------------------------------
 
-# Run interactively to find series IDs:
-  abs_5368 <- read_abs(cat_no = "5368.0")
-  abs_5368 |> distinct(table_title) |> print(n = Inf)
-  abs_5368 |> filter(table_title == "TABLE 2. GOODS, Summary: Original, Current prices") |> distinct(series, series_id) |> print(n = Inf)
-  sitc_tables <- c(
-    "TABLE 12a. MERCHANDISE EXPORTS, Standard International Trade Classification (1 and 2 digit), FOB Value",
-    "TABLE 13a. MERCHANDISE IMPORTS, Standard International Trade Classification (1 and 2 digit), Customs Value"
-  )
-  abs_5368_sitc_ids <- abs_5368 |> 
-  filter(table_title %in% sitc_tables) |>
-  distinct(table_title, series, series_id)
-  print(abs_5368_sitc_ids, n = Inf)
-
+# To rediscover series IDs, run interactively:
+#   abs_5368 <- read_abs(cat_no = "5368.0")
+#   abs_5368 |> distinct(table_title) |> print(n = Inf)
+#   abs_5368 |> filter(table_title == "TABLE 2. GOODS, Summary: Original, Current prices") |> distinct(series, series_id) |> print(n = Inf)
+#   sitc_tables <- c(
+#     "TABLE 12a. MERCHANDISE EXPORTS, Standard International Trade Classification (1 and 2 digit), FOB Value",
+#     "TABLE 13a. MERCHANDISE IMPORTS, Standard International Trade Classification (1 and 2 digit), Customs Value"
+#   )
+#   abs_5368_sitc_ids <- abs_5368 |>
+#     filter(table_title %in% sitc_tables) |>
+#     distinct(table_title, series, series_id)
+#   print(abs_5368_sitc_ids, n = Inf)
 
 abs_trade_value_ids <- c(
-  # TODO: populate after inspecting catalogue
   # Exports
-  "A2717881A",  # Exports: All goods
+  "A1827881R",  # Exports: All goods
   "A1827828C",  # Exports: Mineral fuels, lubricants and related materials (SITC 3)
   "A1827829F",  # Exports: Coal, coke and briquettes (SITC 32)
   "A1827830R",  # Exports: Petroleum, petroleum products and related materials (SITC 33)
   "A1827831T",  # Exports: Gas, natural and manufactured / LNG (SITC 34)
   # Imports
-  "A2718054R",  # Imports: All goods
+  "A1828721W",  # Imports: All goods
   "A1828668W",  # Imports: Mineral fuels, lubricants and related materials (SITC 3)
   "A1828670J",  # Imports: Petroleum, petroleum products and related materials (SITC 33)
   "A1828682T"  # Imports: Fertilisers, excluding crude (SITC 56)
@@ -92,5 +89,3 @@ fred_commodity_prices <- map(fred_series, fredr) |>
   select(series_label, date, value)
 
 saveRDS(fred_commodity_prices, "data/raw/fred_commodity_prices.rds")
-
-

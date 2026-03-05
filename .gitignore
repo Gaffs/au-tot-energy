@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 data/raw/
+data/processed/
 output/
 CLAUDE.md
 .Renviron
