@@ -2,8 +2,12 @@
 .Rhistory
 .RData
 .Ruserdata
-data/raw/
-data/processed/
-output/
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+output/*
+!output/figures/
+output/figures/*
+!output/figures/.gitkeep
 CLAUDE.md
-.Renviron
