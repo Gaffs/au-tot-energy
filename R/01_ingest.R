@@ -12,11 +12,27 @@ fredr_set_key(Sys.getenv("FRED_API_KEY"))
 # ABS: International Trade Price Indexes (Cat. 6457.0), quarterly
 # ------------------------------------------------------------------------------
 
-# To rediscover series IDs, run interactively:
-#   abs_6457 <- read_abs(cat_no = "6457.0")
-#   abs_6457_ids <- abs_6457 |> distinct(table_title, series, series_id)
-#   print(abs_6457_ids, n = Inf)
-#
+# Construct dataframe with Import and Export Price Indexes for SITC to obtain series IDs:
+abs_6457 <- read_abs(cat_no = "6457.0")
+abs_6457_ids <- abs_6457 |> 
+  distinct(table_title, series, series_id) |> 
+  filter(str_detect(table_title, "SITC")) |> 
+  filter(str_detect(series, "Index"))
+print(abs_6457_ids, n = Inf)
+
+# Filter abs_6457_ids for all SITC one-digit components
+abs_6457_sitc1_ids <- abs_6457_ids |> 
+  # If table_title contains "Import", then filter for series string beginning "Index Numbers ;  " followed by a single digit
+  # If table_title contains "Export", then filter for series string containing a single digit between parentheses
+  filter((str_detect(table_title, "Import") & str_detect(series, "^Index Numbers ;  \\d ")) |
+          (str_detect(table_title, "Export") & str_detect(series, "\\(\\d\\)")))
+print(abs_6457_sitc1_ids, n = Inf)
+
+sitc1_trade_prices <- abs_6457 |> 
+  filter(series_id %in% abs_6457_sitc1_ids$series_id)
+
+saveRDS(sitc1_trade_prices, "data/raw/sitc1_trade_prices.rds")
+
 # Confirmed series IDs:
 abs_price_series_ids <- c(
   # Import price indexes
@@ -32,7 +48,7 @@ abs_price_series_ids <- c(
   "A2295603T"  # Export Price Index: Gas, natural and manufactured (SITC 34)
 )
 
-abs_trade_prices <- read_abs(cat_no = "6457.0") |>
+abs_trade_prices <- abs_6457 |>
   filter(series_id %in% abs_price_series_ids)
 
 saveRDS(abs_trade_prices, "data/raw/abs_trade_prices.rds")
@@ -42,18 +58,31 @@ saveRDS(abs_trade_prices, "data/raw/abs_trade_prices.rds")
 # Used to construct time-varying value-share weights for the ToT decomposition
 # ------------------------------------------------------------------------------
 
-# To rediscover series IDs, run interactively:
-#   abs_5368 <- read_abs(cat_no = "5368.0")
-#   abs_5368 |> distinct(table_title) |> print(n = Inf)
-#   abs_5368 |> filter(table_title == "TABLE 2. GOODS, Summary: Original, Current prices") |> distinct(series, series_id) |> print(n = Inf)
-#   sitc_tables <- c(
-#     "TABLE 12a. MERCHANDISE EXPORTS, Standard International Trade Classification (1 and 2 digit), FOB Value",
-#     "TABLE 13a. MERCHANDISE IMPORTS, Standard International Trade Classification (1 and 2 digit), Customs Value"
-#   )
-#   abs_5368_sitc_ids <- abs_5368 |>
-#     filter(table_title %in% sitc_tables) |>
-#     distinct(table_title, series, series_id)
-#   print(abs_5368_sitc_ids, n = Inf)
+# Construct dataframe with Import and Export Price Indexes for SITC to obtain series IDs:
+abs_5368 <- read_abs(cat_no = "5368.0")
+abs_5368 |> distinct(table_title) |> print(n = Inf)
+abs_5368 |> filter(table_title == "TABLE 2. GOODS, Summary: Original, Current prices") |> distinct(series, series_id) |> print(n = Inf)
+sitc_tables <- c(
+  "TABLE 12a. MERCHANDISE EXPORTS, Standard International Trade Classification (1 and 2 digit), FOB Value",
+  "TABLE 13a. MERCHANDISE IMPORTS, Standard International Trade Classification (1 and 2 digit), Customs Value"
+)
+
+abs_5368_sitc_ids <- abs_5368 |>
+  filter(table_title %in% sitc_tables) |>
+  distinct(table_title, series, series_id)
+  print(abs_5368_sitc_ids, n = Inf)
+
+# Filter abs_6457_ids for all SITC one-digit components
+abs_5368_sitc1_ids <- abs_5368_sitc_ids |> 
+  filter(str_detect(series, "^\\d "))
+print(abs_5368_sitc1_ids, n = Inf)
+
+saveRDS(abs_5368_sitc1_ids, "data/raw/sitc1_trade_values.rds")
+
+abs_5368_sitc1_values <- abs_5368 |>
+  filter(series_id %in% abs_5368_sitc1_ids$series_id)
+
+saveRDS(abs_5368_sitc1_values, "data/raw/sitc1_trade_values_data.rds")
 
 abs_trade_value_ids <- c(
   # Exports
@@ -81,7 +110,7 @@ saveRDS(abs_trade_values, "data/raw/abs_trade_values.rds")
 fred_series <- c(
   brent_crude_usd_bbl  = "MCOILBRENTEU",  # Brent crude oil (USD/barrel)
   ttf_gas_usd_mmbtu    = "PNGASEUUSDM",   # TTF natural gas, EU (USD/MMBtu)
-  aud_usd              = "AEXUSAL"         # AUD/USD exchange rate (USD per AUD), monthly average
+  aud_usd              = "EXUSAL"         # AUD/USD exchange rate (USD per AUD), monthly average
 )
 
 fred_commodity_prices <- map(fred_series, fredr) |>

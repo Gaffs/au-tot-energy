@@ -7,6 +7,8 @@ tot_decomp_agg        <- readRDS("data/processed/tot_decomp_agg.rds")
 tot_decomp_disagg     <- readRDS("data/processed/tot_decomp_disagg.rds")
 tot_decomp_agg_qoq    <- readRDS("data/processed/tot_decomp_agg_qoq.rds")
 tot_decomp_disagg_qoq <- readRDS("data/processed/tot_decomp_disagg_qoq.rds")
+sitc1_decomp_yoy      <- readRDS("data/processed/sitc1_decomp_yoy.rds")
+sitc1_decomp_qoq      <- readRDS("data/processed/sitc1_decomp_qoq.rds")
 
 # ------------------------------------------------------------------------------
 # Chart 1: Total export vs import price contributions
@@ -245,4 +247,115 @@ p6 <- ggplot(chart6_data, aes(x = date)) +
   theme(legend.position = "bottom")
 
 ggsave("output/figures/tot_decomp_6_qoq_sitc_disagg.png", p6,
+       width = 18, height = 10, units = "cm", dpi = 150)
+
+# ------------------------------------------------------------------------------
+# Shared setup for Charts 7–8: SITC 1-digit decomposition
+# ------------------------------------------------------------------------------
+
+sitc_labels <- c(
+  "0" = "SITC 0: Food and live animals",
+  "1" = "SITC 1: Beverages and tobacco",
+  "2" = "SITC 2: Crude materials, excl. fuels",
+  "3" = "SITC 3: Mineral fuels",
+  "4" = "SITC 4: Animal/vegetable oils",
+  "5" = "SITC 5: Chemicals",
+  "6" = "SITC 6: Manufactured goods",
+  "7" = "SITC 7: Machinery and transport",
+  "8" = "SITC 8: Miscellaneous manufactures",
+  "9" = "SITC 9: Other commodities"
+)
+
+sitc_colors <- c(
+  "SITC 0: Food and live animals"        = "#a6cee3",
+  "SITC 1: Beverages and tobacco"        = "#1f78b4",
+  "SITC 2: Crude materials, excl. fuels" = "#b2df8a",
+  "SITC 3: Mineral fuels"                = "#33a02c",
+  "SITC 4: Animal/vegetable oils"        = "#fb9a99",
+  "SITC 5: Chemicals"                    = "#e31a1c",
+  "SITC 6: Manufactured goods"           = "#fdbf6f",
+  "SITC 7: Machinery and transport"      = "#ff7f00",
+  "SITC 8: Miscellaneous manufactures"   = "#cab2d6",
+  "SITC 9: Other commodities"            = "#6a3d9a",
+  "Other (net)"                          = "#bababa"
+)
+
+prep_sitc1_chart <- function(decomp) {
+  contrib <- decomp |>
+    filter(date >= "2000-01-01", !is.na(contrib)) |>
+    mutate(
+      value_pct = contrib * 100,
+      component = sitc_labels[sitc_digit]
+    )
+
+  residual <- decomp |>
+    filter(date >= "2000-01-01") |>
+    distinct(date, dlog_tot) |>
+    left_join(
+      contrib |>
+        summarise(total = sum(value_pct, na.rm = TRUE), .by = date),
+      by = "date"
+    ) |>
+    transmute(
+      date,
+      dlog_tot,
+      value_pct = dlog_tot * 100 - coalesce(total, 0),
+      component = "Other (net)"
+    )
+
+  bind_rows(contrib, residual) |>
+    mutate(
+      dlog_tot_pct = dlog_tot * 100,
+      component    = factor(component, levels = names(sitc_colors))
+    )
+}
+
+# ------------------------------------------------------------------------------
+# Chart 7: YoY — SITC 1-digit contributions
+# ------------------------------------------------------------------------------
+
+chart7_data <- prep_sitc1_chart(sitc1_decomp_yoy)
+
+p7 <- ggplot(chart7_data, aes(x = date)) +
+  geom_col(aes(y = value_pct, fill = component), position = "stack", width = 70) +
+  geom_line(aes(y = dlog_tot_pct), color = "black", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = sitc_colors) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+               limits = as.Date(c("2000-01-01", "2025-12-31"))) +
+  labs(
+    title    = "Australia's terms of trade: SITC 1-digit contributions",
+    subtitle = "Year-on-year log change, percentage points",
+    x = NULL, y = "Percentage points", fill = NULL,
+    caption  = "Sources: ABS Cat. 6457.0, 5368.0"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggsave("output/figures/tot_decomp_7_sitc1_yoy.png", p7,
+       width = 18, height = 10, units = "cm", dpi = 150)
+
+# ------------------------------------------------------------------------------
+# Chart 8: QoQ — SITC 1-digit contributions
+# ------------------------------------------------------------------------------
+
+chart8_data <- prep_sitc1_chart(sitc1_decomp_qoq)
+
+p8 <- ggplot(chart8_data, aes(x = date)) +
+  geom_col(aes(y = value_pct, fill = component), position = "stack", width = 70) +
+  geom_line(aes(y = dlog_tot_pct), color = "black", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = sitc_colors) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+               limits = as.Date(c("2000-01-01", "2025-12-31"))) +
+  labs(
+    title    = "Australia's terms of trade: SITC 1-digit contributions",
+    subtitle = "Quarter-on-quarter log change, percentage points",
+    x = NULL, y = "Percentage points", fill = NULL,
+    caption  = "Sources: ABS Cat. 6457.0, 5368.0"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggsave("output/figures/tot_decomp_8_sitc1_qoq.png", p8,
        width = 18, height = 10, units = "cm", dpi = 150)

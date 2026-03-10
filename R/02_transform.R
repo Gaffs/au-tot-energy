@@ -102,9 +102,12 @@ quarter_fy <- function(date) year(date) + (month(date) >= 7L)
 tot_decomp_agg <- abs_prices_clean |>
   select(date, dlog_epi_all, dlog_mpi_all,
          dlog_epi_mineral_fuels, dlog_mpi_mineral_fuels) |>
-  mutate(fy = quarter_fy(date)) |>
-  left_join(select(trade_weights, fy, w_epi_mineral_fuels, w_mpi_mineral_fuels),
-            by = "fy") |>
+  mutate(fy_epi = quarter_fy(date) - 2L,
+         fy_mpi = quarter_fy(date) - 1L) |>
+  left_join(trade_weights |> select(fy, w_epi_mineral_fuels) |> rename(fy_epi = fy),
+            by = "fy_epi") |>
+  left_join(trade_weights |> select(fy, w_mpi_mineral_fuels) |> rename(fy_mpi = fy),
+            by = "fy_mpi") |>
   mutate(
     dlog_tot                  = dlog_epi_all - dlog_mpi_all,
     energy_export_contrib     =  w_epi_mineral_fuels * dlog_epi_mineral_fuels,
@@ -120,9 +123,12 @@ saveRDS(tot_decomp_agg, "data/processed/tot_decomp_agg.rds")
 tot_decomp_agg_qoq <- abs_prices_clean |>
   select(date, qlog_epi_all, qlog_mpi_all,
          qlog_epi_mineral_fuels, qlog_mpi_mineral_fuels) |>
-  mutate(fy = quarter_fy(date)) |>
-  left_join(select(trade_weights, fy, w_epi_mineral_fuels, w_mpi_mineral_fuels),
-            by = "fy") |>
+  mutate(fy_epi = quarter_fy(date) - 2L,
+         fy_mpi = quarter_fy(date) - 1L) |>
+  left_join(trade_weights |> select(fy, w_epi_mineral_fuels) |> rename(fy_epi = fy),
+            by = "fy_epi") |>
+  left_join(trade_weights |> select(fy, w_mpi_mineral_fuels) |> rename(fy_mpi = fy),
+            by = "fy_mpi") |>
   mutate(
     dlog_tot                  = qlog_epi_all - qlog_mpi_all,
     energy_export_contrib     =  w_epi_mineral_fuels * qlog_epi_mineral_fuels,
@@ -143,10 +149,16 @@ tot_decomp_disagg <- abs_prices_clean |>
   select(date, dlog_epi_all, dlog_mpi_all,
          dlog_epi_coal, dlog_epi_petroleum, dlog_epi_gas,
          dlog_mpi_petroleum, dlog_mpi_fertilisers) |>
-  mutate(fy = quarter_fy(date)) |>
-  left_join(select(trade_weights, fy, w_epi_coal, w_epi_petroleum, w_epi_gas,
-                   w_mpi_petroleum, w_mpi_fertilisers),
-            by = "fy") |>
+  mutate(fy_epi = quarter_fy(date) - 2L,
+         fy_mpi = quarter_fy(date) - 1L) |>
+  left_join(trade_weights |>
+              select(fy, w_epi_coal, w_epi_petroleum, w_epi_gas) |>
+              rename(fy_epi = fy),
+            by = "fy_epi") |>
+  left_join(trade_weights |>
+              select(fy, w_mpi_petroleum, w_mpi_fertilisers) |>
+              rename(fy_mpi = fy),
+            by = "fy_mpi") |>
   mutate(
     dlog_tot                  = dlog_epi_all - dlog_mpi_all,
     coal_export_contrib       =  w_epi_coal        * dlog_epi_coal,
@@ -171,10 +183,16 @@ tot_decomp_disagg_qoq <- abs_prices_clean |>
   select(date, qlog_epi_all, qlog_mpi_all,
          qlog_epi_coal, qlog_epi_petroleum, qlog_epi_gas,
          qlog_mpi_petroleum, qlog_mpi_fertilisers) |>
-  mutate(fy = quarter_fy(date)) |>
-  left_join(select(trade_weights, fy, w_epi_coal, w_epi_petroleum, w_epi_gas,
-                   w_mpi_petroleum, w_mpi_fertilisers),
-            by = "fy") |>
+  mutate(fy_epi = quarter_fy(date) - 2L,
+         fy_mpi = quarter_fy(date) - 1L) |>
+  left_join(trade_weights |>
+              select(fy, w_epi_coal, w_epi_petroleum, w_epi_gas) |>
+              rename(fy_epi = fy),
+            by = "fy_epi") |>
+  left_join(trade_weights |>
+              select(fy, w_mpi_petroleum, w_mpi_fertilisers) |>
+              rename(fy_mpi = fy),
+            by = "fy_mpi") |>
   mutate(
     dlog_tot                  = qlog_epi_all - qlog_mpi_all,
     coal_export_contrib       =  w_epi_coal        * qlog_epi_coal,
@@ -194,3 +212,101 @@ tot_decomp_disagg_qoq <- abs_prices_clean |>
          non_energy_import_contrib)
 
 saveRDS(tot_decomp_disagg_qoq, "data/processed/tot_decomp_disagg_qoq.rds")
+
+# ------------------------------------------------------------------------------
+# Step A: Clean SITC 1-digit price indexes
+# ------------------------------------------------------------------------------
+
+sitc1_prices_clean <- readRDS("data/raw/sitc1_trade_prices.rds") |>
+  select(table_title, date, series, value) |>
+  mutate(
+    direction  = if_else(str_detect(table_title, "Import"), "mpi", "epi"),
+    sitc_digit = case_when(
+      direction == "mpi" ~ str_extract(series, "(?<=Index Numbers ;  )\\d"),
+      direction == "epi" ~ str_extract(series, "(?<=\\()\\d(?=\\))")
+    )
+  ) |>
+  filter(!is.na(sitc_digit)) |>
+  select(date, direction, sitc_digit, value) |>
+  pivot_wider(names_from = c(direction, sitc_digit), values_from = value,
+              names_glue = "{direction}_sitc{sitc_digit}") |>
+  arrange(date) |>
+  mutate(across(-date, \(x) log(x / lag(x, 4)), .names = "dlog_{.col}")) |>
+  mutate(across(c(-date, -starts_with("dlog_")),
+                \(x) log(x / lag(x, 1)), .names = "qlog_{.col}"))
+
+saveRDS(sitc1_prices_clean, "data/processed/sitc1_prices_clean.rds")
+
+# ------------------------------------------------------------------------------
+# Step B: SITC 1-digit value-share weights
+# ------------------------------------------------------------------------------
+
+sitc1_value_totals <- readRDS("data/raw/abs_trade_values.rds") |>
+  filter(series_id %in% c("A1827881R", "A1828721W")) |>
+  mutate(
+    direction = if_else(series_id == "A1827881R", "exports", "imports"),
+    fy        = year(date) + (month(date) >= 7L)
+  ) |>
+  summarise(total = sum(value, na.rm = TRUE), .by = c(fy, direction))
+
+sitc1_weights <- readRDS("data/raw/sitc1_trade_values_data.rds") |>
+  select(table_title, date, series, value) |>
+  mutate(
+    direction  = if_else(str_detect(table_title, "EXPORTS"), "exports", "imports"),
+    sitc_digit = str_extract(series, "^\\d")
+  ) |>
+  filter(!is.na(sitc_digit)) |>
+  mutate(fy = year(date) + (month(date) >= 7L)) |>
+  summarise(value = sum(value, na.rm = TRUE), .by = c(fy, direction, sitc_digit)) |>
+  left_join(sitc1_value_totals, by = c("fy", "direction")) |>
+  mutate(weight = value / total) |>
+  select(fy, direction, sitc_digit, weight)
+
+saveRDS(sitc1_weights, "data/processed/sitc1_weights.rds")
+
+# ------------------------------------------------------------------------------
+# Step C: SITC 1-digit ToT decompositions (YoY and QoQ)
+# ------------------------------------------------------------------------------
+
+make_sitc1_decomp <- function(prices_clean, prefix, tot_df) {
+  prices_clean |>
+    select(date, matches(paste0("^", prefix, "_(epi|mpi)_sitc"))) |>
+    pivot_longer(-date, names_to = "col", values_to = "price_change") |>
+    mutate(
+      direction  = if_else(str_detect(col, "_epi_"), "epi", "mpi"),
+      sitc_digit = str_extract(col, "\\d+$")
+    ) |>
+    mutate(
+      fy_join = if_else(
+        direction == "epi",
+        quarter_fy(date) - 2L,
+        quarter_fy(date) - 1L
+      )
+    ) |>
+    left_join(
+      sitc1_weights |>
+        mutate(direction = if_else(direction == "exports", "epi", "mpi"),
+               fy_join   = fy) |>
+        select(-fy),
+      by = c("fy_join", "direction", "sitc_digit")
+    ) |>
+    mutate(contrib = if_else(direction == "epi", 1, -1) * weight * price_change) |>
+    summarise(contrib = sum(contrib, na.rm = TRUE), .by = c(date, sitc_digit)) |>
+    left_join(tot_df, by = "date")
+}
+
+yoy_tot <- abs_prices_clean |>
+  select(date, dlog_epi_all, dlog_mpi_all) |>
+  mutate(dlog_tot = dlog_epi_all - dlog_mpi_all) |>
+  select(date, dlog_tot)
+
+qoq_tot <- abs_prices_clean |>
+  select(date, qlog_epi_all, qlog_mpi_all) |>
+  mutate(dlog_tot = qlog_epi_all - qlog_mpi_all) |>
+  select(date, dlog_tot)
+
+sitc1_decomp_yoy <- make_sitc1_decomp(sitc1_prices_clean, "dlog", yoy_tot)
+sitc1_decomp_qoq <- make_sitc1_decomp(sitc1_prices_clean, "qlog", qoq_tot)
+
+saveRDS(sitc1_decomp_yoy, "data/processed/sitc1_decomp_yoy.rds")
+saveRDS(sitc1_decomp_qoq, "data/processed/sitc1_decomp_qoq.rds")
